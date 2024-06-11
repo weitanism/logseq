@@ -1,6 +1,5 @@
 (ns frontend.mobile.intent
-  (:require ["@capacitor/filesystem" :refer [Filesystem]]
-            ["@capacitor/share" :refer [^js Share]]
+  (:require ["@capacitor/share" :refer [^js Share]]
             ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["path" :as node-path]
             ["send-intent" :refer [^js SendIntent]]
@@ -91,7 +90,7 @@
           date-ref-name (date/today)
           path (editor-handler/get-asset-path basename)
           _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
+                 (.copy mobile-util/filesystem (clj->js {:from url :to path}))
                  (fn [error]
                    (log/error :copy-file-error {:error error})))
           url (util/format "../assets/%s" basename)
@@ -119,7 +118,7 @@
                                (config/get-pages-directory)
                                (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
           _ (p/catch
-             (.copy Filesystem (clj->js {:from url :to path}))
+             (.copy mobile-util/filesystem (clj->js {:from url :to path}))
              (fn [error]
                (log/error :copy-file-error {:error error})))
           url (page-ref/->page-ref title)
@@ -188,7 +187,7 @@
           label (-> basename util/node-path.name)
           path (editor-handler/get-asset-path basename)
           _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
+                 (.copy mobile-util/filesystem (clj->js {:from url :to path}))
                  (fn [error]
                    (log/error :copy-file-error {:error error})))
           url (util/format "../assets/%s" basename)

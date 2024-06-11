@@ -1,53 +1,34 @@
 package com.logseq.app;
 
-import android.content.ContentResolver;
-import android.content.Context;
+import static com.logseq.app.SafBasedFs.buildRootFakePath;
+
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Environment;
-import android.os.Build;
 import android.provider.DocumentsContract;
-import android.provider.Settings;
 import android.util.Log;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.FileProvider;
-import androidx.documentfile.provider.DocumentFile;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
-import com.getcapacitor.annotation.ActivityCallback;
-import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
 
 
 @CapacitorPlugin(name = "FolderPicker")
 public class FolderPicker extends Plugin {
-    public static boolean FileAccessAllowed()
-        {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                return true;
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                return (Environment.isExternalStorageManager());
-            }
-            return false;
-        }
-
     @PluginMethod()
     public void pickFolder(PluginCall call) {
-        if (FileAccessAllowed()) {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-            i.addCategory(Intent.CATEGORY_DEFAULT);
-            startActivityForResult(call, i, "folderPickerResult");
-        } else {
-            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-            Uri uri = Uri.fromParts("package", this.getContext().getPackageName(), null);
-            intent.setData(uri);
-            startActivityForResult(call, intent, 20);
-        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        startActivityForResult(call, intent, "folderPickerResult");
     }
 
     @PluginMethod()
@@ -57,7 +38,8 @@ public class FolderPicker extends Plugin {
 
         // Get URI and MIME type of file
         String appId = getAppId();
-        uri = FileProvider.getUriForFile(getActivity(), appId + ".fileprovider", file);
+        uri = FileProvider.getUriForFile(getActivity(), appId + ".fileprovider",
+                file);
         String mime = getContext().getContentResolver().getType(uri);
 
         Intent intent = new Intent();
@@ -72,20 +54,38 @@ public class FolderPicker extends Plugin {
         if (call == null) {
             return;
         }
+
         JSObject ret = new JSObject();
-        Context context = this.getContext();
-        Uri treeUri = result.getData().getData();
-        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
+        Intent intent = result.getData();
+        if (intent == null) {
+            call.reject("canceled");
+            return;
+        }
+
+        Uri treeUri = intent.getData();
+        if (treeUri == null) {
+            call.reject("got null treeUri");
+            return;
+        }
+
+        // Keep permission across reboots.
+        getContext().getContentResolver()
+                .takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+        Uri uri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
                 DocumentsContract.getTreeDocumentId(treeUri));
-        Log.i("Logseq/FolderPicker", "Got uri " + docUri);
-        String path = FileUtil.getPath(context, docUri);
-        Log.i("Logseq/FolderPicker", "Convert to path " + FileUtil.getPath(context, docUri));
-        if (path == null || path.isEmpty()) {
-            call.reject("Cannot support this directory type: " + docUri);
-        } else {
-            Uri folderUri = Uri.fromFile(new File(path));
-            ret.put("path", folderUri.toString());
+        Log.d("Logseq/FolderPicker", "got uri=" + uri);
+        String fakeRootPath =
+                buildRootFakePath(uri, getActivity().getContentResolver());
+        Log.d("Logseq/FolderPicker", "faked path=" + fakeRootPath);
+        if (fakeRootPath != null &&
+                DocumentsContract.isDocumentUri(getContext(), uri)) {
+            ret.put("path", fakeRootPath);
             call.resolve(ret);
+        } else {
+            call.reject("Cannot support this directory type: " + uri);
         }
     }
 }

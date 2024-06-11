@@ -1,9 +1,9 @@
 (ns frontend.mobile.record
-  (:require ["@capacitor/filesystem" :refer [Filesystem]]
-            ["capacitor-voice-recorder" :refer [VoiceRecorder]]
+  (:require ["capacitor-voice-recorder" :refer [VoiceRecorder]]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.mobile.util :as mobile-util]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -50,9 +50,9 @@
           format (or (:block/format edit-block) (db/get-page-format page))
           path (editor-handler/get-asset-path filename)
           _file (p/catch
-                 (.writeFile Filesystem (clj->js {:data database64
-                                                  :path path
-                                                  :recursive true}))
+                 (.writeFile mobile-util/filesystem (clj->js {:data database64
+                                                              :path path
+                                                              :recursive true}))
                  (fn [error]
                    (log/error :file/write-failed {:path path
                                                   :error error})))

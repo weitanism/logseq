@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.export
   (:require
-   ["@capacitor/filesystem" :refer [Encoding Filesystem]]
    [cljs.pprint :as pprint]
    [clojure.set :as s]
    [clojure.string :as string]
@@ -259,10 +258,10 @@
 
 (defn- export-file-on-mobile [data path]
   (p/catch
-   (.writeFile Filesystem (clj->js {:path path
-                                    :data data
-                                    :encoding (.-UTF8 Encoding)
-                                    :recursive true}))
+   (.writeFile mobile-util/filesystem (clj->js {:path path
+                                                :data data
+                                                :encoding "utf8"
+                                                :recursive true}))
    (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
     (fn [error]
       (notification/show! "Export failed!" :error)
@@ -380,6 +379,9 @@
           data-str (str "data:text/json;charset=utf-8,"
                         (js/encodeURIComponent json-str))]
       (if (mobile-util/native-platform?)
+        ;; TODO: Ask the user for the export location, because the
+        ;; generated filename is out of the user selected directory(by
+        ;; SAF), which crashs the app.
         (export-file-on-mobile json-str filename)
         (when-let [anchor (gdom/getElement "download-as-json-v2")]
           (.setAttribute anchor "href" data-str)

@@ -20,34 +20,19 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
-(when (mobile-util/native-android?)
-  (defn- android-check-permission []
-    (p/let [permission (.checkPermissions Filesystem)
-            permission (-> permission
-                           bean/->clj
-                           :publicStorage)]
-      (when-not (= permission "granted")
-        (p/do!
-         (.requestPermissions Filesystem))))))
-
 (defn- <dir-exists?
   [fpath]
-  (p/catch (p/let [fpath (path/path-normalize fpath)
-                   stat (.stat Filesystem (clj->js {:path fpath}))]
-             (-> stat
-                 bean/->clj
-                 :type
-                 (= "directory")))
-           (fn [_error]
-             false)))
+  (p/let [{exists? :exists} (p/chain (.dirExists mobile-util/filesystem (clj->js {:path fpath}))
+                                     #(js->clj % :keywordize-keys true))]
+    exists?))
 
 (defn <write-file-with-base64
   "Write a binary file, requires base64 encoding"
   [path content]
   (when-not (string/blank? path)
-    (-> (p/chain (.writeFile Filesystem (clj->js {:path path
-                                                  :data content
-                                                  :recursive true}))
+    (-> (p/chain (.writeFile mobile-util/filesystem (clj->js {:path path
+                                                              :data content
+                                                              :recursive true}))
                  #(js->clj % :keywordize-keys true))
         (p/catch (fn [error]
                    (js/console.error "writeFile Error: " path ": " error)
@@ -56,10 +41,10 @@
 (defn- <write-file-with-utf8
   [path content]
   (when-not (string/blank? path)
-    (-> (p/chain (.writeFile Filesystem (clj->js {:path path
-                                                  :data content
-                                                  :encoding (.-UTF8 Encoding)
-                                                  :recursive true}))
+    (-> (p/chain (.writeFile mobile-util/filesystem (clj->js {:path path
+                                                              :data content
+                                                              :encoding "utf8"
+                                                              :recursive true}))
                  #(js->clj % :keywordize-keys true))
         (p/catch (fn [error]
                    (js/console.error "writeFile Error: " path ": " error)
@@ -68,8 +53,8 @@
 (defn- <read-file-with-utf8
   [path]
   (when-not (string/blank? path)
-    (-> (p/chain (.readFile Filesystem (clj->js {:path path
-                                                 :encoding (.-UTF8 Encoding)}))
+    (-> (p/chain (.readFile mobile-util/filesystem (clj->js {:path path
+                                                             :encoding "utf8"}))
                  #(js->clj % :keywordize-keys true)
                  #(get % :data nil))
         (p/catch (fn [error]
@@ -77,7 +62,7 @@
                    nil)))))
 
 (defn- <readdir [path]
-  (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
+  (-> (p/chain (.listDir mobile-util/filesystem (clj->js {:path path}))
                #(js->clj % :keywordize-keys true)
                :files)
       (p/catch (fn [error]
@@ -156,7 +141,7 @@
 (defn- get-backup-dir
   [repo-dir path bak-dir ext]
   (let [relative-path (-> path
-                          (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir)))
+                          (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir) "/*"))
                                           "")
                           (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
                                           ""))]
@@ -165,13 +150,11 @@
 (defn- <truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
-  (-> (p/let [files (.readdir Filesystem (clj->js {:path dir}))
-
-              files (:files (js->clj files :keywordize-keys true))]
+  (-> (p/let [files (<readdir dir)]
         (drop 6 (reverse (sort-by :mtime files))))
       (p/then (fn [old-version-files]
                 (p/all (mapv (fn [file]
-                               (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+                               (.deleteFile mobile-util/filesystem (clj->js {:path (:uri file)})))
                              old-version-files))))
       (p/catch (fn [_]))))
 
@@ -302,8 +285,7 @@
 
 (defn- open-dir
   [dir]
-  (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
-          {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker
+  (p/let [{:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker
                                                              (clj->js (when (and dir (mobile-util/native-ios?))
                                                                         {:path dir})))
                                                 (p/then #(js->clj % :keywordize-keys true))
@@ -334,7 +316,7 @@
         (p/then (fn [exists?]
                   (if exists?
                     (p/resolved true)
-                    (.mkdir Filesystem
+                    (.mkdir mobile-util/filesystem
                             (clj->js
                              {:path dir})))))
         (p/catch (fn [error]
@@ -345,7 +327,7 @@
         (p/then (fn [exists?]
                   (if exists?
                     (p/resolved true)
-                    (.mkdir Filesystem
+                    (.mkdir mobile-util/filesystem
                             (clj->js
                              {:path dir
                               :recursive true})))))
@@ -376,26 +358,26 @@
   (write-file! [_this repo dir path content opts]
     (let [fpath (path/path-join dir path)]
       (p/let [stat (p/catch
-                    (.stat Filesystem (clj->js {:path fpath}))
-                    (fn [_e] :not-found))]
+                       (.stat mobile-util/filesystem (clj->js {:path fpath}))
+                       (fn [_e] :not-found))]
         ;; `path` is full-path
         (write-file-impl! repo dir path content opts stat))))
   (rename! [_this _repo old-fpath new-fpath]
-    (-> (.rename Filesystem
+    (-> (.rename mobile-util/filesystem
                  (clj->js
                   {:from old-fpath
                    :to new-fpath}))
         (p/catch (fn [error]
                    (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
-    (-> (.copy Filesystem
+    (-> (.copy mobile-util/filesystem
                (clj->js
                 {:from old-path
                  :to new-path}))
         (p/catch (fn [error]
                    (log/error :copy-file-failed error)))))
   (stat [_this fpath]
-    (-> (p/chain (.stat Filesystem (clj->js {:path fpath}))
+    (-> (p/chain (.stat mobile-util/filesystem (clj->js {:path fpath}))
                  #(js->clj % :keywordize-keys true))
         (p/catch (fn [error]
                    (let [errstr (if error (.toString error) "")]

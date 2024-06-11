@@ -33,6 +33,9 @@
   (defonce file-sync FileSync)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
 
+(when (native-android?)
+  (defonce filesystem (registerPlugin "SafBasedFs")))
+
 (defn hide-splash []
   (.hide SplashScreen))
 

@@ -1,10 +1,10 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
-            ["@capacitor/filesystem" :refer [Filesystem]]
             [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [goog.object :as gobj]
@@ -29,9 +29,9 @@
                   ;; See-also: https://capacitorjs.com/docs/apis/camera#galleryphoto
                   (p/let [filename (str (date/get-date-time-string-2) ".jpeg")
                           image-path (editor-handler/get-asset-path filename)
-                          _ret (.writeFile Filesystem (clj->js {:data (.-base64String photo)
-                                                                :path image-path
-                                                                :recursive true}))]
+                          _ret (.writeFile mobile-util/filesystem (clj->js {:data (.-base64String photo)
+                                                                            :path image-path
+                                                                            :recursive true}))]
                     filename))))
       (p/catch (fn [error]
                  (log/error :file/write-failed {:error error})))))
