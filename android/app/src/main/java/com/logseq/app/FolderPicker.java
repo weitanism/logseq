@@ -1,7 +1,5 @@
 package com.logseq.app;
 
-import static com.logseq.app.SafBasedFs.buildRootFakePath;
-
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.DocumentsContract;
@@ -78,7 +76,8 @@ public class FolderPicker extends Plugin {
                 DocumentsContract.getTreeDocumentId(treeUri));
         Log.d("Logseq/FolderPicker", "got uri=" + uri);
         String fakeRootPath =
-                buildRootFakePath(uri, getActivity().getContentResolver());
+                FakePathFactory.buildRootFakePath(uri,
+                        getActivity().getContentResolver());
         Log.d("Logseq/FolderPicker", "faked path=" + fakeRootPath);
         if (fakeRootPath != null &&
                 DocumentsContract.isDocumentUri(getContext(), uri)) {
